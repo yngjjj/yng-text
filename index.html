@@ -659,7 +659,7 @@ footer a{color:var(--text-2)}
 .ai-err{color:#d70015;font-size:14.5px;line-height:1.5;margin:0 0 14px}
 .pg-lines{position:absolute;inset:0;pointer-events:none;z-index:0}
 .pg-lines.pg-cov{z-index:2}
-/* листы с: настоящий размер, тень, серый промежуток между листами */
+/* листы как в Word: настоящий размер, тень, серый промежуток между листами */
 .pg-sheet{position:absolute;left:0;right:0;background:var(--bg-elev);box-shadow:0 0 0 1px var(--line-2),0 6px 22px rgba(0,0,0,.14);border-radius:2px}
 .pg-erase{position:absolute;left:0;right:0;background:var(--bg-elev)}
 .pg-num{position:absolute;left:0;right:0;text-align:center;font-size:11px;line-height:1;color:var(--text-3);font-variant-numeric:tabular-nums}
@@ -2417,19 +2417,22 @@ const AI_PAT = [
   ['cont', 'Продолжить текст', 'Написать следующий фрагмент', 'Продолжи текст в том же стиле и тоне: напиши следующий логичный фрагмент (1–3 абзаца). Выведи только продолжение, исходный текст не повторяй.', 'ins'],
   ['title', 'Придумать заголовок', '5 вариантов заголовка', 'Предложи 5 вариантов заголовка для этого текста, списком.', 'ins']
 ];
-const AI_LANG = ['английский', 'русский', 'немецкий', 'французский', 'испанский', 'итальянский', 'португальский', 'китайский', 'японский', 'корейский', 'турецкий', 'польский', 'арабский'];
+const AI_LANG = ['английский', 'русский', 'немецкий', 'французский', 'испанский', 'итальянский', 'португальский', 'китайский', 'японский', 'корейский', 'турецкий', 'украинский', 'польский', 'арабский'];
 /* встроенный ИИ (через Worker): Gemini или Cloudflare Workers AI */
 const AI_BUILT = {
-  gemini: {name: 'Gemini', note: 'Google Gemini: у бесплатного плана есть дневной лимит.'},
-  cf: {name: 'Cloudflare', note: 'Cloudflare AI: у бесплатного плана общий дневной лимит на всех пользователей.',
-    models: [['gemma12', 'Gemma 3 12B (баланс)'], ['llama70', 'Llama 3.3 70B (качественнее, лимит расходуется быстрее)'], ['qwen30', 'Qwen3 30B (экономнее)']]}
+  gemini: {name: 'Gemini', note: 'Google Gemini: сильный русский язык, но у бесплатного ключа есть дневной лимит.'},
+  cf: {name: 'Cloudflare', note: 'Модели Cloudflare Workers AI: работают на серверах Cloudflare, у бесплатного плана общий дневной лимит на всех пользователей.',
+    models: [['gemma4', 'Gemma 4 26B (по умолчанию, экономно)'], ['llama70', 'Llama 3.3 70B (качественнее, лимит расходуется быстрее)'], ['mistral24', 'Mistral Small 3.1 24B (сбалансированно)'], ['scout', 'Llama 4 Scout 17B (быстрая, новая)'], ['gptoss120', 'GPT-OSS 120B (мощная, лимит расходуется быстро)']]}
 };
 const aiBP = () => store.get('yng_ai_bp', 'gemini') === 'cf' ? 'cf' : 'gemini';
 const aiCFModel = () => { const m = store.get('yng_ai_cfm', ''); return AI_BUILT.cf.models.some(x => x[0] === m) ? m : AI_BUILT.cf.models[0][0]; };
+let aiDetail = '';   /* пояснение от сервера: код ответа Gemini/Cloudflare, чтобы было понятно, что именно не так */
 async function aiCallBuilt(prompt, signal){
+  aiDetail = '';
   if(!YNG_SEND_URL || !(TG && TG.initData)) throw new Error('no_tg');
   let r, j; try{ r = await fetch(YNG_SEND_URL, {method: 'POST', headers: {'Content-Type': 'application/json'}, signal, body: JSON.stringify({action: 'ai', initData: TG.initData, system: AI_SYS, prompt, provider: aiBP(), model: aiBP() === 'cf' ? aiCFModel() : undefined})}); j = await r.json(); }
   catch(e){ if(e && e.name === 'AbortError') throw e; throw new Error('network'); }
+  aiDetail = j.ok ? '' : String(j.detail || '').slice(0, 300);
   if(!j.ok || !j.text) throw new Error(j.error || 'server');
   return String(j.text);
 }
@@ -2551,7 +2554,7 @@ function openAI(){
       const toBuilt = src === 'puter' && ['puter_limit', 'puter_fail', 'puter_load', 'puter_model'].includes(code);
       const other = src === 'built' && ['ai_limit', 'ai_fail', 'no_key'].includes(code) ? (aiBP() === 'cf' ? 'gemini' : 'cf') : '';
       const again = last && code !== 'too_big' && code !== 'no_tg' && code !== 'puter_limit';
-      dlg.innerHTML = `<h3>Помощь ИИ</h3><p class="ai-err">${esc(AI_ERR[code] || ('Ошибка: ' + code))}</p>${toPuter ? '<p class="ai-hint">Можно продолжить через свой аккаунт Puter: у него свой бесплатный лимит.</p>' : ''}${code === 'puter_limit' ? '<p class="ai-hint">Можно вернуться ко встроенному ИИ или пополнить лимит в аккаунте Puter.</p>' : ''}<div class="acts"><button type="button" class="btn small neutral" data-back="1">Назад</button>${again ? '<button type="button" class="btn small neutral" data-again="1">Повторить</button>' : ''}${code === 'puter_model' ? '<button type="button" class="btn small" data-set="1">Настройки ИИ</button>' : ''}${other ? `<button type="button" class="btn small neutral" data-bgo="${other}">Попробовать ${AI_BUILT[other].name}</button>` : ''}${toBuilt ? '<button type="button" class="btn small neutral" data-srcgo="built">Встроенный ИИ</button>' : ''}${toPuter ? '<button type="button" class="btn small" data-srcgo="puter">Через Puter</button>' : ''}</div>`;
+      dlg.innerHTML = `<h3>Помощь ИИ</h3><p class="ai-err">${esc(AI_ERR[code] || ('Ошибка: ' + code))}</p>${aiDetail && src === 'built' ? `<p class="ai-hint">Детали: ${esc(aiDetail)}</p>` : ''}${toPuter ? '<p class="ai-hint">Можно продолжить через свой аккаунт Puter: у него свой бесплатный лимит.</p>' : ''}${code === 'puter_limit' ? '<p class="ai-hint">Можно вернуться ко встроенному ИИ или пополнить лимит в аккаунте Puter.</p>' : ''}<div class="acts"><button type="button" class="btn small neutral" data-back="1">Назад</button>${again ? '<button type="button" class="btn small neutral" data-again="1">Повторить</button>' : ''}${code === 'puter_model' ? '<button type="button" class="btn small" data-set="1">Настройки ИИ</button>' : ''}${other ? `<button type="button" class="btn small neutral" data-bgo="${other}">Попробовать ${AI_BUILT[other].name}</button>` : ''}${toBuilt ? '<button type="button" class="btn small neutral" data-srcgo="built">Встроенный ИИ</button>' : ''}${toPuter ? '<button type="button" class="btn small" data-srcgo="puter">Через Puter</button>' : ''}</div>`;
     };
     const viewLogin = () => {
       dlg.innerHTML = `<h3>Вход в Puter</h3><p>Чтобы использовать ИИ через свой аккаунт, войдите в Puter: откроется окно puter.com. После входа запрос выполнится сам.</p><p class="ai-hint">Тексты отправляются сервису Puter и далее выбранной нейросети (Google или Anthropic).</p><div class="acts"><button type="button" class="btn small neutral" data-back="1">Назад</button><button type="button" class="btn small" data-psign="1">Войти в Puter</button></div>`;
@@ -3724,7 +3727,7 @@ const pgIcon = (w, h) => `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="$
 function popPage(anchor){
   const k = cur && (PAGES[cur.page] || cur.page === 'music') ? cur.page : 'def';
   const items = [['a5', 'A5', '148 × 210 мм', pgIcon(10, 14)], ['a4', 'A4', '210 × 297 мм', pgIcon(12, 17)], ['a3', 'A3', '297 × 420 мм', pgIcon(15, 21)], ['def', 'По умолчанию', 'как в редакторе сейчас', pgIcon(18, 12)]];
-  openPop(anchor, '<div class="mh">Параметры страницы</div>' + items.map(([id, n, d, i]) => `<button class="mi col pg${k === id ? ' cur' : ''}" data-pg="${id}"><span class="pgi">${i}</span><span><b>${n}</b><small>${d}</small></span></button>`).join('') + '<hr><button class="mi col pg' + (k === 'music' ? ' cur' : '') + '" data-pg="music"><span class="pgi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18M3 11h18M3 14h18M3 17h18"/><circle cx="9" cy="15.500" r="1.900"/><path d="M10.900 15.500V6.500l4 1.500"/></svg></span><span><b>Нотная тетрадь</b><small>нотный стан, ввод и воспроизведение</small></span></button>' + '<div class="mh" style="text-transform:none;letter-spacing:0">Листы показаны в реальном размере. Размер применяется и при печати / сохранении в PDF.</div>', p => {
+  openPop(anchor, '<div class="mh">Параметры страницы</div>' + items.map(([id, n, d, i]) => `<button class="mi col pg${k === id ? ' cur' : ''}" data-pg="${id}"><span class="pgi">${i}</span><span><b>${n}</b><small>${d}</small></span></button>`).join('') + '<hr><button class="mi col pg' + (k === 'music' ? ' cur' : '') + '" data-pg="music"><span class="pgi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18M3 11h18M3 14h18M3 17h18"/><circle cx="9" cy="15.500" r="1.900"/><path d="M10.900 15.500V6.500l4 1.500"/></svg></span><span><b>Нотная тетрадь</b><small>нотный стан, ввод и воспроизведение</small></span></button>' + '<div class="mh" style="text-transform:none;letter-spacing:0">Листы показаны в реальном размере, как в Word. Размер применяется и при печати / сохранении в PDF.</div>', p => {
     p.addEventListener('click', e => { const b = e.target.closest('[data-pg]'); if(!b || !cur) return; closePop(); setPage(b.dataset.pg); });
   });
 }
@@ -3753,7 +3756,7 @@ function pgStyle(pg){
   if(!st){ st = document.createElement('style'); st.id = 'pgStyle'; document.head.appendChild(st); }
   st.textContent = pg ? `@page{size:${pg.w}mm ${pg.h}mm;margin:${PGM}mm}` : '';
 }
-/* ---------- лист с: настоящий размер, поля, промежуток между листами ---------- */
+/* ---------- лист как в Word: настоящий размер, поля, промежуток между листами ---------- */
 const PG_GAP = 28;
 /* служебные отступы, которыми экранная вёрстка «переносит» блоки на следующий лист; в текст и PDF не попадают */
 function pgStrip(root){
@@ -9333,15 +9336,15 @@ window.addEventListener('scroll', () => { closePop(); bubble.classList.contains(
 /* ================= drafts: state, save, load ================= */
 const TPL = [
   {k:'blank', t:'Пустой черновик', d:'Чистый лист — просто пишите', i:'blank', title:() => '', html:() => '<p><br></p>'},
-  {k:'todo', t:'Список дел', d:'Задачи на день с отметками', i:'todo', title:() => 'Список дел — ' + todayRu(),
-    html:() => '<h2>Сегодня</h2><p>✓&nbsp;</p><p>✓&nbsp;</p><p>✓&nbsp;</p><h2>На неделе</h2><p>✓&nbsp;</p><p>☐&nbsp;</p><h2>Когда-нибудь</h2><p>✓&nbsp;</p>'},
+  {k:'todo', t:'Список дел', d:'Задачи на день с отметками ☐', i:'todo', title:() => 'Список дел — ' + todayRu(),
+    html:() => '<h2>Сегодня</h2><p>☐&nbsp;</p><p>☐&nbsp;</p><p>☐&nbsp;</p><h2>На неделе</h2><p>☐&nbsp;</p><p>☐&nbsp;</p><h2>Когда-нибудь</h2><p>☐&nbsp;</p>'},
   {k:'meet', t:'Заметки встречи', d:'Повестка, решения и задачи', i:'users', title:() => 'Встреча — ' + todayRu(),
-    html:() => '<h2>Повестка</h2><ul><li><br></li></ul><h2>Участники</h2><ul><li><br></li></ul><h2>Решения</h2><ol><li><br></li></ol><h2>Задачи</h2><p>✓&nbsp;</p><p>✓&nbsp;</p><blockquote><p>Следующая встреча: </p></blockquote>'},
+    html:() => '<h2>Повестка</h2><ul><li><br></li></ul><h2>Участники</h2><ul><li><br></li></ul><h2>Решения</h2><ol><li><br></li></ol><h2>Задачи</h2><p>☐&nbsp;</p><p>☐&nbsp;</p><blockquote><p>Следующая встреча: </p></blockquote>'},
   {k:'notes', t:'Конспект', d:'Тема, главное, вопросы и выводы', i:'book', title:() => 'Конспект',
     html:() => '<h1>Тема</h1><p>Коротко: о чём это и зачем.</p><h2>Главное</h2><ul><li><br></li></ul><h2>Термины</h2><ul><li><br></li></ul><h2>Вопросы</h2><ul><li><br></li></ul><h2>Выводы</h2><p><br></p>'},
   {k:'cmp', t:'Сравнение', d:'Таблица «вариант — плюсы — минусы»', i:'table', title:() => 'Сравнение вариантов',
     html:() => '<p>Что сравниваем и зачем:</p><table><tbody><tr><th>Вариант</th><th>Плюсы</th><th>Минусы</th></tr><tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr></tbody></table><h3>Решение</h3><p><br></p>'},
-  {k:'music', t:'Нотная тетрадь', d:'Нотный стан, ввод и воспроизведение', i:'music', title:() => 'Нотная тетрадь', html:() => '<p><br></p>', page:'music'}
+  {k:'music', t:'Нотная тетрадь', d:'нотный стан, ввод и воспроизведение', i:'music', title:() => 'Нотная тетрадь', html:() => '<p><br></p>', page:'music'}
 ];
 const blank = () => ({id: uid(), title: '', html: '<p><br></p>', created: Date.now(), updated: Date.now(), pinned: false, hist: [], transient: true});
 const newest = () => Object.values(DR).filter(r => !isDeck(r)).sort((a, b) => b.updated - a.updated)[0] || null;
